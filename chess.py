@@ -1,7 +1,9 @@
 import copy
 import pygame
 
-from pieces import *
+from pieces import Pawn, Rook, Knight, Bishop, Queen, King, Block
+from pieces import BLOCK_SIZE, BOARD_RECT, GREY
+
 
 # BASIC CONFIGURATIONS
 SCREENX, SCREENY = 700, 500
@@ -243,7 +245,7 @@ class Game:
                 boardcpy[p.y][p.x] = None
 
                 if not self.is_check(boardcpy, mx, my, is_king=isinstance(p, King)):
-                    print('nope', p)
+                    #print('nope', p)
                     mate = False
                     break
         return mate
