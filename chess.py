@@ -1,15 +1,17 @@
 import pygame
 
-from pieces import Pawn, Rook, Knight, Bishop, Queen, King, Block, Position
-from pieces import BLOCK_SIZE, GREY, WHITE
+from pieces import Pawn, Piece, Rook, Knight, Bishop, Queen, King, Block, Position
+from pieces import BLOCK_SIZE, GREY
 
 
 # BASIC CONFIGURATIONS
 SCREENX, SCREENY = 800, 530
+FONT = 'Arial'
 FPS = 30
 
 BOARD_RECT = 25, 25, 480, 480
 FILES = 'abcdefgh'
+WHITE = (255, 255, 255)
 
 PIECE_SYMBOLS = {
     'P': Pawn,
@@ -28,8 +30,8 @@ def resolve_position(notation):
 
 
 class Move:
-    def __init__(self, oldpos, newpos, piece):
-        self.oldpos = oldpos
+    def __init__(self, piece, newpos):
+        self.oldpos = piece.pos
         self.newpos = newpos
         self.piece = piece
 
@@ -40,13 +42,13 @@ class Board:
         self.turn = 'WHITE'
         self.in_check = False
         self.in_mate = False
-        self.board = []
+        self.board: list[list[Piece]] = []
         # Number of moves without capture / pawn movement (Tie)
         self.move50 = 0
         self.fullmoves = 0
 
         # En Passant
-        self.ep_square = None
+        self.ep_square: Position = None
 
         # Sprite groups one for all pieces and one for all sprites
         self.all_sprites = pygame.sprite.Group()
@@ -56,8 +58,7 @@ class Board:
         self.create_blocks()
         self.create_board(fen_notation)
 
-        self.history = []
-        self.last_move = ()
+        self.history: list[Move] = []
 
     def get_piece(self, pos):
         return self.board[pos.y][pos.x]
@@ -177,6 +178,12 @@ class Board:
 
     def move_piece(self, piece, newpos):
         "Move a chess piece in the board"
+        # Deselect last move
+        if self.history:
+            last_move = self.history[-1]
+            self.get_block(last_move.oldpos).deselect()
+            self.get_block(last_move.newpos).deselect()
+
         # Get the original piece on the board
         capture_piece = self.board[newpos.y][newpos.x]
         if isinstance(piece, Pawn) and newpos == self.ep_square:
@@ -191,8 +198,9 @@ class Board:
 
         # Store original positions for future reference
         oldpos = piece.pos
-        self.blocks[oldpos.y][oldpos.x].deselect()
-        self.last_move = oldpos, newpos
+        self.get_block(oldpos).select()
+        self.get_block(newpos).select()
+        self.history.append(Move(piece, newpos))
 
         # assume the king is not in check (validating moves was done above)
         king = self.kings[self.turn]
@@ -304,7 +312,7 @@ class Game:
         self.clock = pygame.time.Clock()
         self.screen = pygame.display.set_mode((SCREENX, SCREENY))
         self.board_surface = pygame.Surface(BOARD_RECT[2:])
-        self.font = pygame.font.SysFont('Arial', 15, True)
+        self.font = pygame.font.SysFont(FONT, 15, True)
         self.running = True
 
         self.create_ui()

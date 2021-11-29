@@ -4,8 +4,8 @@ import pygame
 
 
 # COLORS REQUIRED (RGB)
-GREEN = (118,150,86)
-WHITE = (255, 255, 255)
+COLOR1 = (255, 255, 255)
+COLOR2 = (118,150,86)
 GREY = (211, 211, 211)
 RED = (240, 72, 72)
 
@@ -52,7 +52,7 @@ class Block(pygame.sprite.Sprite):
 
         # Create a rectangle of required size and color
         self.image = pygame.Surface(BLOCK_SIZE)
-        self.color = WHITE if color else GREEN
+        self.color = COLOR2 if color else COLOR1
         self.image.fill(self.color)
 
         self.rect = self.image.get_rect(x=BLOCK_SIZE[0]*x, y=BLOCK_SIZE[1]*y)
@@ -76,9 +76,7 @@ class Block(pygame.sprite.Sprite):
     def check(self, isCheck):
         self.image.fill(RED if isCheck else self.color)
         self.is_check = isCheck
-    
-    def __repr__(self):
-        return self.name
+
 
 
 # Base class for all pieces        
@@ -111,9 +109,6 @@ class Piece(pygame.sprite.Sprite):
         self.x, self.y = pos.x, pos.y
         self.update_pos()
 
-    def serialize(self):
-        return (self.pos, self.piece, self.color, self.moved, self.double)
-
     def update_pos(self):
         "update position of image in the screen"
         self.rect.center = BLOCK_SIZE[0] * (self.x + 0.5), BLOCK_SIZE[1] * (self.y + 0.5)
@@ -122,12 +117,12 @@ class Piece(pygame.sprite.Sprite):
         # Checks whether the move position is valid (not out of board and not occupied by same team pieces)
         return 0 <= x < 8 and 0 <= y < 8 and (not board[y][x] or board[y][x].color != self.color)
             
-    def gen_moves(self, board, lst):
+    def generate_moves(self, board, lst):
         # Get all valid moves based on incremented directions (diagonal, vertical, horizontal)
         valid = []
         
         for ix, iy in lst:
-            curx, cury = self.x, self.y
+            curx, cury = self.pos
             while True:
                 curx, cury = curx + ix, cury + iy
                 if self.check_valid(board, curx, cury):
@@ -141,12 +136,12 @@ class Piece(pygame.sprite.Sprite):
     def diagonal_moves(self, board):
         # Get all possible diagonal moves
         lst = [(1, 1), (-1, 1), (-1, -1), (1, -1)]
-        return self.gen_moves(board, lst)
+        return self.generate_moves(board, lst)
         
     def linear_moves(self, board):
         # Get all horizontal and vertical moves
         lst = [(1, 0), (0, 1), (-1, 0), (0, -1)]
-        return self.gen_moves(board, lst)
+        return self.generate_moves(board, lst)
 
     def __repr__(self):
         return f'[{self.color} {self.piece} {self.x},{self.y}]'
@@ -158,7 +153,7 @@ class Pawn(Piece):
         self.increment = -1 if self.color == 'WHITE' else 1
     
     def check_en_passant(self, ep_square):
-        return abs(ep_square[1] - self.x) == 1 and self.y + self.increment == ep_square[0]
+        return abs(ep_square[1] - self.x) == 1 and self.y + self.increment == ep_square.y
 
     def moves(self, board):
         nposy = self.y + self.increment
