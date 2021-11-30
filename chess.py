@@ -22,6 +22,7 @@ PIECE_SYMBOLS = {
     'K': King
 }
 
+STARTING_FEN = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1'
 
 def resolve_position(notation):
     x = FILES.index(notation[0])
@@ -35,14 +36,17 @@ class Move:
         self.newpos = newpos
         self.piece = piece
 
+    def to_uci(self):
+        return self.oldpos.symbol() + self.newpos.symbol()
+
 
 class Board:
-    def __init__(self, fen_notation='rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1'):
+    def __init__(self, fen_notation=STARTING_FEN):
         # Current player color
         self.turn = 'WHITE'
         self.in_check = False
         self.in_mate = False
-        self.board: list[list[Piece]] = []
+        self.board: list[list[Piece]] = [[None for _ in range(8)] for _ in range(8)]
         # Number of moves without capture / pawn movement (Tie)
         self.move50 = 0
         self.fullmoves = 0
@@ -59,8 +63,9 @@ class Board:
         self.create_board(fen_notation)
 
         self.history: list[Move] = []
+        self.all_valid_moves = []
 
-    def get_piece(self, pos):
+    def get_piece(self, pos: Position):
         return self.board[pos.y][pos.x]
     
     def find_piece(self, piece=None, color=None, pos=None):
@@ -125,27 +130,23 @@ class Board:
         for i in range(8):
             for j in range(8):
                 self.blocks[i].append(Block(j, i, (i+j)%2 == 0))
+        self.all_sprites.add(self.blocks)
 
-    def create_board(self, fen):
+    def create_board(self, fen: str):
         "Create the board UI and place chess pieces on the board"
         fields = fen.split()
         ranks = fields[0].split('/')
         for y, rank in enumerate(ranks):
-            self.board.append([])
             x = 0
             for square in rank:
                 if square.isdigit():
                     x += int(square)
-                    self.board[y].extend([None for _ in range(int(square))])
                 else:
                     piece = PIECE_SYMBOLS[square.upper()]
                     color = 'WHITE' if square.isupper() else 'BLACK'
-                    self.board[y].append(piece(Position(x, y), color))
+                    self.add_piece(piece(Position(x, y), color))
                     x += 1
-        
-        self.piece_sprites.add(self.board[0:2], self.board[6:8])
-        self.all_sprites.add(self.blocks, self.piece_sprites)
-        
+
         # Store kings for both players, useful for checks and castling
         self.kings = {
             'WHITE': self.find_piece('KING', 'WHITE')[0], 
@@ -167,16 +168,22 @@ class Board:
         self.kings['WHITE'].castling = ['Q' in castling, 'K' in castling]
         self.kings['BLACK'].castling = ['q' in castling, 'k' in castling]
 
-    def _move_piece(self, piece, newpos):
+    def _move_piece(self, piece: Piece, newpos: Position):
         self.board[piece.y][piece.x] = None
         piece.move(newpos)
         self.board[newpos.y][newpos.x] = piece
 
-    def remove_piece(self, piece):
+    def add_piece(self, piece: Piece):
+        "Add the sprite to sprite groups"
+        self.board[piece.pos.y][piece.pos.x] = piece
+        self.piece_sprites.add(piece)
+        self.all_sprites.add(piece)
+
+    def remove_piece(self, piece: Piece):
         piece.kill()
         self.board[piece.y][piece.x] = None
 
-    def move_piece(self, piece, newpos):
+    def move_piece(self, piece: Piece, newpos: Position):
         "Move a chess piece in the board"
         # Deselect last move
         if self.history:
@@ -232,7 +239,6 @@ class Board:
                 # Create the queen and add it to sprite groups and board
                 promotion = Queen(newpos, self.turn)
                 self.add_piece(promotion)
-                self.board[newpos.y][newpos.x] = promotion
         
         # Change coordinates of the moving piece
         self._move_piece(piece, newpos)
@@ -264,11 +270,6 @@ class Board:
             if is_king and pos in moves:
                 return True
         return False
-
-    def add_piece(self, sprite):
-        "Add the sprite back to sprite groups"
-        self.all_sprites.add(sprite)
-        self.piece_sprites.add(sprite)
 
     def is_mate(self):
         "Look for a mate, see if player has any other possible moves"
@@ -320,11 +321,11 @@ class Game:
     
     def create_ui(self):
         for i in range(1, 9):
-            text_surf = self.font.render(str(9-i), 1, WHITE)
+            text_surf = self.font.render(str(9-i), 0, WHITE)
             text_rect = text_surf.get_rect(centerx=BOARD_RECT[0]/2, centery=BLOCK_SIZE[1]*i)
             self.screen.blit(text_surf, text_rect)
 
-            text_surf = self.font.render(FILES[i-1], 1, WHITE)
+            text_surf = self.font.render(FILES[i-1], 0, WHITE)
             text_rect = text_surf.get_rect(centerx=BLOCK_SIZE[0]*i, centery=SCREENY-BOARD_RECT[1]/2)
             self.screen.blit(text_surf, text_rect)
 
@@ -391,7 +392,6 @@ class Game:
                 self.handle_event(event)
 
             # Draw everything
-            #self.board.piece_sprites.update()
             self.board.all_sprites.draw(self.board_surface)
             # Show all possible move sets as circle dots
             for mx, my in self.valid_moves:
