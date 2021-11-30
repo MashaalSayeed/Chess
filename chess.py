@@ -47,6 +47,7 @@ class Board:
         self.in_check = False
         self.in_mate = False
         self.board: list[list[Piece]] = [[None for _ in range(8)] for _ in range(8)]
+        
         # Number of moves without capture / pawn movement (Tie)
         self.move50 = 0
         self.fullmoves = 0
@@ -54,26 +55,22 @@ class Board:
         # En Passant
         self.ep_square: Position = None
 
-        # Sprite groups one for all pieces and one for all sprites
-        self.all_sprites = pygame.sprite.Group()
+        # Sprite group for all pieces
         self.piece_sprites = pygame.sprite.Group()
-
-        # 2 seperate lists for the board and their respective blocks (Block class)
-        self.create_blocks()
         self.create_board(fen_notation)
 
         self.history: list[Move] = []
-        self.all_valid_moves = []
+        self.all_valid_moves: list[Move] = []
 
     def get_piece(self, pos: Position):
         return self.board[pos.y][pos.x]
     
+    def get_current_king(self):
+        return self.kings[self.turn]
+    
     def find_piece(self, piece=None, color=None, pos=None):
         "Finds a piece with the given conditions"
         return [p for p in self.piece_sprites if ((not piece or p.piece == piece) and (not color or p.color == color))]
-    
-    def get_block(self, pos):
-        return self.blocks[pos.y][pos.x]
 
     def get_move_notation(
         self, piece, oldpos, newpos, captured=False, castling=False,
@@ -124,13 +121,6 @@ class Board:
             if not self.is_check(boardcpy, pos=move, is_king=is_king):
                 valid_moves.append(move)
         return valid_moves
-    
-    def create_blocks(self):
-        self.blocks = [[] for _ in range(8)]
-        for i in range(8):
-            for j in range(8):
-                self.blocks[i].append(Block(j, i, (i+j)%2 == 0))
-        self.all_sprites.add(self.blocks)
 
     def create_board(self, fen: str):
         "Create the board UI and place chess pieces on the board"
@@ -162,7 +152,7 @@ class Board:
         self.ep_square = resolve_position(fields[3]) if fields[3] != '-' else None
         self.move50 = int(fields[4])
         self.fullmoves = int(fields[5])
-        self.print_board(self.board)
+        self.print_board()
 
     def set_fen_castling(self, castling):
         self.kings['WHITE'].castling = ['Q' in castling, 'K' in castling]
@@ -177,7 +167,6 @@ class Board:
         "Add the sprite to sprite groups"
         self.board[piece.pos.y][piece.pos.x] = piece
         self.piece_sprites.add(piece)
-        self.all_sprites.add(piece)
 
     def remove_piece(self, piece: Piece):
         piece.kill()
@@ -185,12 +174,6 @@ class Board:
 
     def move_piece(self, piece: Piece, newpos: Position):
         "Move a chess piece in the board"
-        # Deselect last move
-        if self.history:
-            last_move = self.history[-1]
-            self.get_block(last_move.oldpos).deselect()
-            self.get_block(last_move.newpos).deselect()
-
         # Get the original piece on the board
         capture_piece = self.board[newpos.y][newpos.x]
         if isinstance(piece, Pawn) and newpos == self.ep_square:
@@ -205,14 +188,8 @@ class Board:
 
         # Store original positions for future reference
         oldpos = piece.pos
-        self.get_block(oldpos).select()
-        self.get_block(newpos).select()
         self.history.append(Move(piece, newpos))
-
-        # assume the king is not in check (validating moves was done above)
-        king = self.kings[self.turn]
-        self.get_block(king.pos).check(False)
-
+        king = self.get_current_king()
         castling = False
         self.ep_square = None
         promotion = None
@@ -246,15 +223,10 @@ class Board:
         self.turn = 'BLACK' if self.turn == 'WHITE' else 'WHITE'
         self.in_check = self.is_check(self.board)
         self.in_mate = self.is_mate()
-        notation = self.get_move_notation(
+        return self.get_move_notation(
             piece, oldpos, newpos, captured=capture_piece, 
             castling=castling, promotion=promotion
         )
-        print(notation)
-
-        king = self.kings[self.turn]
-        self.get_block(king.pos).check(self.in_check)
-        self.print_board(self.board)
 
     def is_check(self, board, pos=None, is_king=False):
         "Look for a check, return True if it is a checkmate"
@@ -292,10 +264,10 @@ class Board:
                     break
         return mate
     
-    def print_board(self, board):
+    def print_board(self):
         string = '=======================\n'
         string += '  +-----------------+\n'
-        for i, row in enumerate(board):
+        for i, row in enumerate(self.board):
             string += f'{str(8 - i)} | '
             for piece in row:
                 string += f'{piece.symbol} ' if piece else '. '
@@ -310,16 +282,25 @@ class Game:
     def __init__(self):
         # Initialize pygame stuff
         pygame.init()
+
         self.clock = pygame.time.Clock()
         self.screen = pygame.display.set_mode((SCREENX, SCREENY))
         self.board_surface = pygame.Surface(BOARD_RECT[2:])
         self.font = pygame.font.SysFont(FONT, 15, True)
+        self.blocks = pygame.sprite.Group()
         self.running = True
 
         self.create_ui()
         self.run()
     
+    def get_block(self, pos: Position):
+        return [b for b in self.blocks if b.pos == pos][0]
+
     def create_ui(self):
+        for i in range(8):
+            for j in range(8):
+                self.blocks.add(Block(Position(i, j), (i+j)%2 == 0))
+
         for i in range(1, 9):
             text_surf = self.font.render(str(9-i), 0, WHITE)
             text_rect = text_surf.get_rect(centerx=BOARD_RECT[0]/2, centery=BLOCK_SIZE[1]*i)
@@ -342,12 +323,36 @@ class Game:
         if len(clicked_sprites) == 1 and clicked_sprites[0].color == self.board.turn:
             # unselect previously selected piece
             if self.selected:
-                self.board.get_block(self.selected).deselect()
+                self.get_block(self.selected.pos).deselect()
 
             self.selected = clicked_sprites[0]
             self.valid_moves = self.board.get_moves(self.selected)
-            self.board.get_block(self.selected).select()
+            self.get_block(self.selected.pos).select()
     
+    def move_selected(self, newpos: Position):
+        # Deselect last move
+        try:
+            last_move = self.board.history[-1]
+            self.get_block(last_move.oldpos).deselect()
+            self.get_block(last_move.newpos).deselect()
+        except IndexError:
+            pass
+
+        # Select current move
+        self.get_block(self.selected.pos).select()
+        self.get_block(newpos).select()
+
+        # assume the king is not in check (validating moves was done above)
+        king = self.board.get_current_king()
+        self.get_block(king.pos).check(False)
+
+        move = self.board.move_piece(self.selected, newpos)
+        print(move)
+        self.board.print_board()
+
+        king = self.board.get_current_king()
+        self.get_block(king.pos).check(self.board.in_check)
+
     def handle_event(self, event):
         if event.type == pygame.QUIT:
             self.running = False
@@ -362,8 +367,7 @@ class Game:
             y = int((y - BOARD_RECT[1]) // BLOCK_SIZE[1])
 
             if (x, y) in self.valid_moves:
-                self.board.get_block(self.selected).deselect()
-                self.board.move_piece(self.selected, Position(x, y))
+                self.move_selected(Position(x, y))
                 self.valid_moves = []
                 self.selected = None
 
@@ -392,7 +396,8 @@ class Game:
                 self.handle_event(event)
 
             # Draw everything
-            self.board.all_sprites.draw(self.board_surface)
+            self.blocks.draw(self.board_surface)
+            self.board.piece_sprites.draw(self.board_surface)
             # Show all possible move sets as circle dots
             for mx, my in self.valid_moves:
                 cx = int(BLOCK_SIZE[0] * (mx + 0.5))

@@ -46,16 +46,16 @@ class Position(collections.namedtuple('Position', ['x', 'y'])):
 
 # Class for a block, usually handles all background changes when selected
 class Block(pygame.sprite.Sprite):
-    def __init__(self, x, y, color):
+    def __init__(self, pos, color):
         super().__init__()
-        self.pos = Position(x, y) 
+        self.pos = pos
 
         # Create a rectangle of required size and color
         self.image = pygame.Surface(BLOCK_SIZE)
         self.color = COLOR2 if color else COLOR1
         self.image.fill(self.color)
 
-        self.rect = self.image.get_rect(x=BLOCK_SIZE[0]*x, y=BLOCK_SIZE[1]*y)
+        self.rect = self.image.get_rect(x=BLOCK_SIZE[0]*pos.x, y=BLOCK_SIZE[1]*pos.y)
 
         self.selected = False
         self.is_check = False
