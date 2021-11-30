@@ -46,7 +46,7 @@ class Position(collections.namedtuple('Position', ['x', 'y'])):
 
 # Class for a block, usually handles all background changes when selected
 class Block(pygame.sprite.Sprite):
-    def __init__(self, pos, color):
+    def __init__(self, pos: Position, color):
         super().__init__()
         self.pos = pos
 
@@ -66,12 +66,14 @@ class Block(pygame.sprite.Sprite):
             self.image.fill(BLOCK_SELECTED)
         elif self.is_check:
             self.image.fill(RED)
-
         self.selected = True
     
     def deselect(self):
         self.selected = False
-        self.image.fill(self.color)
+        if self.is_check:
+            self.image.fill(RED)
+        else:
+            self.image.fill(self.color)
 
     def check(self, isCheck):
         self.image.fill(RED if isCheck else self.color)
@@ -81,9 +83,8 @@ class Block(pygame.sprite.Sprite):
 
 # Base class for all pieces        
 class Piece(pygame.sprite.Sprite): 
-    def __init__(self, pos, color, piece):
+    def __init__(self, pos: Position, color, piece):
         super().__init__()
-        # x, y coordinates of piece in square matrix
         self.pos = pos
         self.x, self.y = pos.x, pos.y
 
@@ -213,14 +214,14 @@ class Bishop(Piece):
 class King(Piece):
     def __init__(self, pos, color):
         super().__init__(pos, color, 'KING')
-        self.castling = [True, True] # [Queen side, King side]
+        self.castling = [None, None] # [Queen side, King side]
 
-    def check_castling(self, board, rook1, rook2):
+    def check_castling(self, board):
         valid_moves = []
-        if self.castling[0] and rook1 and not any((board[self.y][self.x-1], board[self.y][self.x-2], board[self.y][self.x-3])):
+        if self.castling[0] and not any((board[self.y][self.x-1], board[self.y][self.x-2], board[self.y][self.x-3])):
             valid_moves.append(Position(self.x-2, self.y))
 
-        if self.castling[1] and rook2 and not any((board[self.y][self.x+1], board[self.y][self.x+2])):
+        if self.castling[1] and not any((board[self.y][self.x+1], board[self.y][self.x+2])):
             valid_moves.append(Position(self.x+2, self.y))
         return valid_moves
 

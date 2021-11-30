@@ -31,7 +31,7 @@ def resolve_position(notation):
 
 
 class Move:
-    def __init__(self, piece, newpos):
+    def __init__(self, piece: Piece, newpos: Position):
         self.oldpos = piece.pos
         self.newpos = newpos
         self.piece = piece
@@ -72,6 +72,44 @@ class Board:
         "Finds a piece with the given conditions"
         return [p for p in self.piece_sprites if ((not piece or p.piece == piece) and (not color or p.color == color))]
 
+    def create_board(self, fen: str):
+        "Create the board UI and place chess pieces on the board"
+        fields = fen.split()
+        ranks = fields[0].split('/')
+        for y, rank in enumerate(ranks):
+            x = 0
+            for square in rank:
+                if square.isdigit():
+                    x += int(square)
+                else:
+                    piece = PIECE_SYMBOLS[square.upper()]
+                    color = 'WHITE' if square.isupper() else 'BLACK'
+                    self.add_piece(piece(Position(x, y), color))
+                    x += 1
+
+        # Store kings for both players, useful for checks and castling
+        self.kings = {
+            'WHITE': self.find_piece('KING', 'WHITE')[0], 
+            'BLACK': self.find_piece('KING', 'BLACK')[0]
+        }
+
+        self.turn = 'WHITE' if fields[1] == 'w' else 'BLACK'
+        self.set_fen_castling(fields[2])
+        self.ep_square = resolve_position(fields[3]) if fields[3] != '-' else None
+        self.move50 = int(fields[4])
+        self.fullmoves = int(fields[5])
+        self.print_board()
+    
+    def set_fen_castling(self, fen):
+        if 'Q' in fen:
+            self.kings['WHITE'].castling[0] = self.get_piece(Position(0, 7))
+        if 'K' in fen:
+            self.kings['WHITE'].castling[1] = self.get_piece(Position(7, 7))
+        if 'q' in fen:
+            self.kings['BLACK'].castling[0] = self.get_piece(Position(0, 0))
+        if 'k' in fen:
+            self.kings['BLACK'].castling[1] = self.get_piece(Position(7, 0))
+
     def get_move_notation(
         self, piece, oldpos, newpos, captured=False, castling=False,
         promotion=None
@@ -107,8 +145,7 @@ class Board:
         # Check if castling is possible
         is_king = piece.piece == 'KING'
         if is_king and not self.in_check:
-            rook1, rook2 = self.rooks[self.turn]
-            moves += piece.check_castling(self.board, rook1, rook2)
+            moves += piece.check_castling(self.board)
         elif piece.piece == 'PAWN' and self.ep_square and piece.check_en_passant(self.ep_square):
             moves += [self.ep_square]
         
@@ -121,42 +158,6 @@ class Board:
             if not self.is_check(boardcpy, pos=move, is_king=is_king):
                 valid_moves.append(move)
         return valid_moves
-
-    def create_board(self, fen: str):
-        "Create the board UI and place chess pieces on the board"
-        fields = fen.split()
-        ranks = fields[0].split('/')
-        for y, rank in enumerate(ranks):
-            x = 0
-            for square in rank:
-                if square.isdigit():
-                    x += int(square)
-                else:
-                    piece = PIECE_SYMBOLS[square.upper()]
-                    color = 'WHITE' if square.isupper() else 'BLACK'
-                    self.add_piece(piece(Position(x, y), color))
-                    x += 1
-
-        # Store kings for both players, useful for checks and castling
-        self.kings = {
-            'WHITE': self.find_piece('KING', 'WHITE')[0], 
-            'BLACK': self.find_piece('KING', 'BLACK')[0]
-        }
-        self.rooks = {
-            'WHITE': (self.get_piece(Position(0, 7)), self.get_piece(Position(7, 7))),
-            'BLACK': (self.get_piece(Position(0, 0)), self.get_piece(Position(7, 0)))
-        }
-
-        self.turn = 'WHITE' if fields[1] == 'w' else 'BLACK'
-        self.set_fen_castling(fields[2])
-        self.ep_square = resolve_position(fields[3]) if fields[3] != '-' else None
-        self.move50 = int(fields[4])
-        self.fullmoves = int(fields[5])
-        self.print_board()
-
-    def set_fen_castling(self, castling):
-        self.kings['WHITE'].castling = ['Q' in castling, 'K' in castling]
-        self.kings['BLACK'].castling = ['q' in castling, 'k' in castling]
 
     def _move_piece(self, piece: Piece, newpos: Position):
         self.board[piece.y][piece.x] = None
@@ -187,22 +188,22 @@ class Board:
             self.move50 += 1
 
         # Store original positions for future reference
-        oldpos = piece.pos
         self.history.append(Move(piece, newpos))
-        king = self.get_current_king()
-        castling = False
         self.ep_square = None
+        king = self.get_current_king()
+        oldpos = piece.pos
+        castling = False
         promotion = None
         if piece.piece == 'KING':
-            piece.castling = [False, False]
+            piece.castling = [None, None]
             if abs(newpos.x - oldpos.x) == 2:
                 castling = True
                 rook = self.board[piece.y][7 if (newpos.x - oldpos.x) > 0 else 0]
                 diff = 1 if rook.x == 0 else -1
                 self._move_piece(rook, newpos.move(diff, 0))
-        elif piece.piece == 'ROOK':
-            side = self.rooks[self.turn].index(piece)
-            king.castling[side] = False
+        elif piece.piece == 'ROOK' and piece in king.castling:
+            side = king.castling.index(piece)
+            king.castling[side] = None
         elif piece.piece == 'PAWN':
             # Moved 2 spaces, check en 
             if abs(newpos.y - oldpos.y) == 2:
