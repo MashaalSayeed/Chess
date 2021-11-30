@@ -60,7 +60,7 @@ class Board:
         self.create_board(fen_notation)
 
         self.history: list[Move] = []
-        self.all_valid_moves: list[Move] = []
+        #self.all_valid_moves: dict[Position, list[Position]] = {}
 
     def get_piece(self, pos: Position):
         return self.board[pos.y][pos.x]
@@ -98,6 +98,7 @@ class Board:
         self.ep_square = resolve_position(fields[3]) if fields[3] != '-' else None
         self.move50 = int(fields[4])
         self.fullmoves = int(fields[5])
+        self.all_valid_moves = self.get_all_moves()
         self.print_board()
     
     def set_fen_castling(self, fen):
@@ -140,7 +141,14 @@ class Board:
         "Returs a copy of the 2d board"
         return [[c for c in r] for r in self.board]
 
-    def get_moves(self, piece):
+    def get_all_moves(self):
+        pieces = [p for p in self.piece_sprites if p.color == self.turn]
+        moves = {}
+        for p in pieces:
+           moves[p.pos] = self.get_piece_moves(p)
+        return moves
+
+    def get_piece_moves(self, piece):
         moves = piece.moves(self.board)
         # Check if castling is possible
         is_king = piece.piece == 'KING'
@@ -170,6 +178,7 @@ class Board:
         self.piece_sprites.add(piece)
 
     def remove_piece(self, piece: Piece):
+        "Kills the piece and removes it from the board"
         piece.kill()
         self.board[piece.y][piece.x] = None
 
@@ -223,7 +232,8 @@ class Board:
 
         self.turn = 'BLACK' if self.turn == 'WHITE' else 'WHITE'
         self.in_check = self.is_check(self.board)
-        self.in_mate = self.is_mate()
+        self.all_valid_moves = self.get_all_moves()
+        self.in_mate = not any(self.all_valid_moves.values())
         return self.get_move_notation(
             piece, oldpos, newpos, captured=capture_piece, 
             castling=castling, promotion=promotion
@@ -243,27 +253,6 @@ class Board:
             if is_king and pos in moves:
                 return True
         return False
-
-    def is_mate(self):
-        "Look for a mate, see if player has any other possible moves"
-        mate = True
-        pieces = [p for p in self.piece_sprites if p.color == self.turn]
-
-        for p in pieces:
-            # Once we have found it is not a mate break
-            if not mate:
-                break
-
-            for move in p.moves(self.board):
-                # Simulate all posible moves and see if any are valid
-                boardcpy = self.copy_board()
-                boardcpy[move.y][move.x] = p
-                boardcpy[p.y][p.x] = None
-
-                if not self.is_check(boardcpy, pos=move, is_king=isinstance(p, King)):
-                    mate = False
-                    break
-        return mate
     
     def print_board(self):
         string = '=======================\n'
@@ -327,7 +316,8 @@ class Game:
                 self.get_block(self.selected.pos).deselect()
 
             self.selected = clicked_sprites[0]
-            self.valid_moves = self.board.get_moves(self.selected)
+            self.piece_moves = self.board.all_valid_moves.get(self.selected.pos, [])
+            #self.board.get_moves(self.selected)
             self.get_block(self.selected.pos).select()
     
     def move_selected(self, newpos: Position):
@@ -367,9 +357,9 @@ class Game:
             x = int((x - BOARD_RECT[0]) // BLOCK_SIZE[0])
             y = int((y - BOARD_RECT[1]) // BLOCK_SIZE[1])
 
-            if (x, y) in self.valid_moves:
+            if (x, y) in self.piece_moves:
                 self.move_selected(Position(x, y))
-                self.valid_moves = []
+                self.piece_moves = []
                 self.selected = None
 
                 # Mate: No move possible
@@ -390,7 +380,7 @@ class Game:
         "Main game loop"
         self.board = Board()
         self.selected = None
-        self.valid_moves = []
+        self.piece_moves = []
 
         while self.running:
             for event in pygame.event.get():
@@ -400,7 +390,7 @@ class Game:
             self.blocks.draw(self.board_surface)
             self.board.piece_sprites.draw(self.board_surface)
             # Show all possible move sets as circle dots
-            for mx, my in self.valid_moves:
+            for mx, my in self.piece_moves:
                 cx = int(BLOCK_SIZE[0] * (mx + 0.5))
                 cy = int(BLOCK_SIZE[1] * (my + 0.5))
 
