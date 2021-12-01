@@ -6,6 +6,7 @@ import pygame
 # COLORS REQUIRED (RGB)
 COLOR1 = (255, 255, 255)
 COLOR2 = (118,150,86)
+
 GREY = (211, 211, 211)
 RED = (240, 72, 72)
 

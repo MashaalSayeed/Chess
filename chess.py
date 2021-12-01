@@ -50,7 +50,7 @@ class Board:
         
         # Number of moves without capture / pawn movement (Tie)
         self.move50 = 0
-        self.fullmoves = 0
+        self.fullmoves = 1
 
         # En Passant
         self.ep_square: Position = None
@@ -60,7 +60,6 @@ class Board:
         self.create_board(fen_notation)
 
         self.history: list[Move] = []
-        #self.all_valid_moves: dict[Position, list[Position]] = {}
 
     def get_piece(self, pos: Position):
         return self.board[pos.y][pos.x]
@@ -102,14 +101,48 @@ class Board:
         self.print_board()
     
     def set_fen_castling(self, fen):
+        white_king, black_king = self.kings['WHITE'], self.kings['BLACK']
         if 'Q' in fen:
-            self.kings['WHITE'].castling[0] = self.get_piece(Position(0, 7))
+            white_king.castling[0] = self.get_piece(Position(0, 7))
         if 'K' in fen:
-            self.kings['WHITE'].castling[1] = self.get_piece(Position(7, 7))
+            white_king.castling[1] = self.get_piece(Position(7, 7))
         if 'q' in fen:
-            self.kings['BLACK'].castling[0] = self.get_piece(Position(0, 0))
+            black_king.castling[0] = self.get_piece(Position(0, 0))
         if 'k' in fen:
-            self.kings['BLACK'].castling[1] = self.get_piece(Position(7, 0))
+            black_king.castling[1] = self.get_piece(Position(7, 0))
+
+    def get_fen_notation(self):
+        board_fen = ''
+        for i in range(8):
+            empty = 0
+            for j in range(8):
+                if self.board[i][j]:
+                    board_fen += str(empty) if empty else ""
+                    board_fen += self.board[i][j].symbol
+                else:
+                    empty += 1
+            board_fen += "/"
+        
+        turn_fen = 'w' if self.turn == 'WHITE' else 'b'
+        castling_fen = self.get_fen_castling()
+        ep_fen = self.ep_square.symbol() if self.ep_square else '-'
+        hm_clock = str(self.move50)
+        fullmove_clock = str(self.fullmoves)
+        return ' '.join((board_fen, turn_fen, castling_fen, ep_fen, hm_clock, fullmove_clock))
+
+    def get_fen_castling(self):
+        white_king, black_king = self.kings['WHITE'], self.kings['BLACK']
+        castling_fen = ''
+        if white_king.castling[1]:
+            castling_fen += 'K'
+        if white_king.castling[0]:
+            castling_fen += 'Q'
+        if black_king.castling[1]:
+            castling_fen += 'k'
+        if black_king.castling[0]:
+            castling_fen += 'q'
+
+        return castling_fen or '-'
 
     def get_move_notation(
         self, piece, oldpos, newpos, captured=False, castling=False,
@@ -229,6 +262,8 @@ class Board:
         
         # Change coordinates of the moving piece
         self._move_piece(piece, newpos)
+        if self.turn == 'BLACK':
+            self.fullmoves += 1
 
         self.turn = 'BLACK' if self.turn == 'WHITE' else 'WHITE'
         self.in_check = self.is_check(self.board)
