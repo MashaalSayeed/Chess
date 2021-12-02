@@ -1,52 +1,55 @@
-import pygame
-
-from pieces import Pawn, Piece, Rook, Knight, Bishop, Queen, King, Block, Position
-from pieces import BLOCK_SIZE, GREY
+from constants import Position, STARTING_FEN, FILES
 
 
-# BASIC CONFIGURATIONS
-SCREENX, SCREENY = 530, 530
-FONT = 'Arial'
-FPS = 30
+class Piece:
+    "Base class for all pieces"
+    piece = ''
+    def __init__(self, pos: Position, color):
+        self.pos = pos
+        self.x, self.y = pos.x, pos.y
 
-BOARD_RECT = 25, 25, 480, 480
-BLOCK_SIZE = 60, 60
-FILES = 'abcdefgh'
-WHITE = (255, 255, 255)
+        # color of the piece, will also determine the team it is in
+        self.color = color
+        self.symbol = self.piece[0] if self.piece != 'KNIGHT' else 'N'
+        if self.color == 'BLACK':
+            self.symbol = self.symbol.lower()
 
-PIECE_SYMBOLS = {
-    'P': Pawn,
-    'R': Rook,
-    'N': Knight,
-    'B': Bishop,
-    'Q': Queen,
-    'K': King
-}
+    def move(self, pos):
+        # update the coordinates of piece in square matrix
+        self.pos = pos
+        self.x, self.y = pos.x, pos.y
 
-STARTING_FEN = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1'
+    def check_valid(self, board, x, y):
+        # Checks whether the move position is valid (not out of board and not occupied by same team pieces)
+        return 0 <= x < 8 and 0 <= y < 8 and (not board[y][x] or board[y][x].color != self.color)
+            
+    def generate_moves(self, board, lst):
+        # Get all valid moves based on incremented directions (diagonal, vertical, horizontal)
+        valid = []
+        for ix, iy in lst:
+            curx, cury = self.pos
+            while True:
+                curx, cury = curx + ix, cury + iy
+                if self.check_valid(board, curx, cury):
+                    valid.append(Position(curx, cury))
+                    if board[cury][curx]:
+                        break
+                else:
+                    break
+        return valid
 
-# Credits: https://www.pygame.org/wiki/Spritesheet
-class Spritesheet:
-    def __init__(self, filename):
-        self.sheet = pygame.image.load(filename)
-        self.sprites = {}
+    def diagonal_moves(self, board):
+        # Get all possible diagonal moves
+        lst = [(1, 1), (-1, 1), (-1, -1), (1, -1)]
+        return self.generate_moves(board, lst)
+        
+    def linear_moves(self, board):
+        # Get all horizontal and vertical moves
+        lst = [(1, 0), (0, 1), (-1, 0), (0, -1)]
+        return self.generate_moves(board, lst)
 
-    def image_at(self, rect: pygame.Rect, colorkey=None):
-        "Loads image from a pygame.Rect"
-        image = pygame.Surface(rect.size).convert_alpha()
-        image.blit(self.sheet, (0, 0), rect)
-        if colorkey is not None:
-            if colorkey == -1:
-                colorkey = image.get_at((0,0))
-            image.set_colorkey(colorkey, pygame.RLEACCEL)
-        return image
-
-    def load_spritemap(self, filename, colorkey=None):
-        with open(filename) as map:
-            for line in map.readlines():
-                name, x, y, w, h = line.strip().split(',')
-                rect = pygame.Rect(int(x), int(y), int(w), int(h))
-                self.sprites[name] = self.image_at(rect, colorkey=colorkey)
+    def __repr__(self):
+        return f'[{self.color} {self.piece} {self.x},{self.y}]'
 
 
 class Move:
@@ -57,6 +60,107 @@ class Move:
 
     def to_uci(self):
         return self.oldpos.symbol() + self.newpos.symbol()
+
+
+class Pawn(Piece):
+    piece = 'PAWN'
+    def __init__(self, pos, color):
+        super().__init__(pos, color)
+        self.increment = -1 if self.color == 'WHITE' else 1
+    
+    def check_en_passant(self, ep_square):
+        return abs(ep_square[1] - self.x) == 1 and self.y + self.increment == ep_square.y
+
+    def moves(self, board):
+        nposy = self.y + self.increment
+        valid = []
+        
+        if 0 <= nposy <= 7:
+            # Diagonal attack
+            if 0 <= self.x+1 <= 7 and board[nposy][self.x+1] and board[nposy][self.x+1].color != self.color:
+                valid.append(Position(self.x+1, nposy))
+                
+            if 0 <= self.x-1 <= 7 and board[nposy][self.x-1] and board[nposy][self.x-1].color != self.color:
+                valid.append(Position(self.x-1, nposy))
+
+        # Forward Movement
+        if 0 <= nposy <= 7 and board[nposy][self.x] == None:
+            valid.append(Position(self.x, nposy))
+                
+            # Double Forward
+            if (self.color == 'WHITE' and self.y == 6) or (self.color == 'BLACK' and self.y == 1):
+                nposy += self.increment
+                if board[nposy][self.x] == None:
+                    valid.append(Position(self.x, nposy))
+        return valid
+
+
+class Rook(Piece):
+    piece = 'ROOK'
+    def moves(self, board):
+        return self.linear_moves(board)
+
+
+class Knight(Piece):
+    piece = 'KNIGHT'
+    def moves(self, board):
+        # Generates max 8 moves based on increment values
+        lst = [(1, 2), (2, 1), (-1, 2), (2, -1), (-1, -2), (-2, -1), (-2, 1), (1, -2)]
+        valid = []
+        for ix, iy in lst:
+            nx, ny = self.x + ix, self.y + iy
+            if self.check_valid(board, nx, ny):
+                valid.append(Position(nx, ny))
+        return valid                    
+
+
+class Bishop(Piece):
+    piece = 'BISHOP'
+    def moves(self, board):
+        return self.diagonal_moves(board)
+
+
+class King(Piece):
+    piece = 'KING'
+    def __init__(self, pos, color):
+        super().__init__(pos, color)
+        self.castling = [None, None] # [Queen side, King side]
+
+    def check_castling(self, board):
+        valid_moves = []
+        if self.castling[0] and not any((board[self.y][self.x-1], board[self.y][self.x-2], board[self.y][self.x-3])):
+            valid_moves.append(Position(self.x-2, self.y))
+
+        if self.castling[1] and not any((board[self.y][self.x+1], board[self.y][self.x+2])):
+            valid_moves.append(Position(self.x+2, self.y))
+        return valid_moves
+
+    def moves(self, board):
+        # Generates max 8 moves based on increment values (Similar to horse)
+        lst = [(1,1), (0,1), (1,0), (-1,-1), (0,-1), (-1,0), (-1,1), (1,-1)]
+        valid = []
+        for ix, iy in lst:
+            nx, ny = self.x + ix, self.y + iy
+
+            if self.check_valid(board, nx, ny):
+                valid.append(Position(nx, ny))
+        return valid
+
+
+class Queen(Piece):
+    piece = 'QUEEN'
+    def moves(self, board):
+        return self.diagonal_moves(board) + self.linear_moves(board)
+
+
+PIECE_SYMBOLS = {
+    'P': Pawn,
+    'R': Rook,
+    'N': Knight,
+    'B': Bishop,
+    'Q': Queen,
+    'K': King
+}
 
 
 class Board:
@@ -318,168 +422,3 @@ class Board:
         string += '  +-----------------+\n'
         string += '    a b c d e f g h\n'
         print(string)
-
-
-class UI:
-    def __init__(self, board: Board):
-        self.board = board
-    
-        self.spritesheet = Spritesheet('./images/spritesheet.png')
-        self.spritesheet.load_spritemap('./images/spritemap.txt')
-        self.font = pygame.font.SysFont(FONT, 15, True)
-
-        self.board_surface = pygame.Surface(BOARD_RECT[2:])
-        self.blocks = pygame.sprite.Group()
-
-    def get_block(self, pos: Position) -> Block:
-        return [b for b in self.blocks if b.pos == pos][0]
-
-    def create(self, screen):
-        for i in range(8):
-            for j in range(8):
-                self.blocks.add(Block(Position(i, j), (i+j)%2 == 0))
-
-        for i in range(1, 9):
-            text_surf = self.font.render(str(9-i), 0, WHITE)
-            text_rect = text_surf.get_rect(centerx=BOARD_RECT[0]/2, centery=BLOCK_SIZE[1]*i)
-            screen.blit(text_surf, text_rect)
-
-            text_surf = self.font.render(FILES[i-1], 0, WHITE)
-            text_rect = text_surf.get_rect(centerx=BLOCK_SIZE[0]*i, centery=SCREENY-BOARD_RECT[1]/2)
-            screen.blit(text_surf, text_rect)
-
-        board_width = BOARD_RECT[3] + BOARD_RECT[0] * 2
-        self.side_screen = pygame.Surface((SCREENX - board_width, SCREENY))
-        self.side_screen.fill('grey')
-        screen.blit(self.side_screen, (board_width, 0))
-
-    def select_piece(self):
-        pos = pygame.mouse.get_pos()
-        clicked_block = [b for b in self.blocks if b.rect.move(*BOARD_RECT[:2]).collidepoint(pos)]
-        if clicked_block:
-            return self.board.get_piece(clicked_block[0].pos)
-    
-    def draw_pieces(self, surface):
-        for p in self.board.pieces:
-            img = self.spritesheet.sprites[p.symbol]
-            rect = img.get_rect(center=(BLOCK_SIZE[0] * (p.x + 0.5), BLOCK_SIZE[1] * (p.y + 0.5)))
-            surface.blit(self.spritesheet.sprites[p.symbol], rect)
-
-    def show_valid_moves(self, moves):
-        "Show all possible move sets as circle dots"
-        for mx, my in moves:
-            cx = int(BLOCK_SIZE[0] * (mx + 0.5))
-            cy = int(BLOCK_SIZE[1] * (my + 0.5))
-            pygame.draw.circle(self.board_surface, GREY, (cx, cy), 10)
-
-    def update(self):
-        self.blocks.draw(self.board_surface)
-        self.draw_pieces(self.board_surface)
-    
-    def draw(self, surface):
-        surface.blit(self.board_surface, BOARD_RECT)
-
-
-
-class Game:
-    def __init__(self):
-        # Initialize pygame stuff
-        self.clock = pygame.time.Clock()
-        self.screen = pygame.display.set_mode((SCREENX, SCREENY))
-        self.running = True
-
-        self.board = Board()
-        self.selected = None
-        self.piece_moves = []
-
-        self.ui = UI(self.board)
-        self.run()
-
-    def select_piece(self):
-        "Get the selected piece, unselect if already selected, get all valid moves"
-        piece = self.ui.select_piece()
-        if piece and piece.color == self.board.turn:
-            # unselect previously selected piece
-            if self.selected:
-                self.ui.get_block(self.selected.pos).deselect()
-
-            self.selected = piece
-            self.piece_moves = self.board.all_valid_moves.get(self.selected.pos, [])
-            self.ui.get_block(self.selected.pos).select()
-    
-    def move_selected(self, newpos: Position):
-        # Deselect last move
-        try:
-            last_move = self.board.history[-1]
-            self.ui.get_block(last_move.oldpos).deselect()
-            self.ui.get_block(last_move.newpos).deselect()
-        except IndexError:
-            pass
-
-        # Select current move
-        self.ui.get_block(self.selected.pos).last_move()
-        self.ui.get_block(newpos).last_move()
-
-        # assume the king is not in check (validating moves was done above)
-        king = self.board.get_current_king()
-        self.ui.get_block(king.pos).check(False)
-
-        move = self.board.move_piece(self.selected, newpos)
-        print(f"{self.board.turn}'s move: {move}\n")
-        self.board.print_board()
-
-        king = self.board.get_current_king()
-        self.ui.get_block(king.pos).check(self.board.in_check)
-
-    def handle_event(self, event):
-        if event.type == pygame.QUIT:
-            self.running = False
-        elif event.type == pygame.MOUSEBUTTONDOWN and not self.selected:
-            # If no piece is selected, select a piece
-            self.select_piece()
-        elif event.type == pygame.MOUSEBUTTONDOWN and self.selected:
-            # else move the piece if the position is valid
-            # calculate square matrix coordinates of mouse
-            x, y = pygame.mouse.get_pos()
-            x = int((x - BOARD_RECT[0]) // BLOCK_SIZE[0])
-            y = int((y - BOARD_RECT[1]) // BLOCK_SIZE[1])
-
-            if (x, y) in self.piece_moves:
-                self.move_selected(Position(x, y))
-                self.piece_moves = []
-                self.selected = None
-
-                # Mate: No move possible
-                if self.board.in_mate:
-                    self.running = False
-                    if self.board.in_check:
-                        print("Checkmate:", self.board.turn, "has lost")
-                    else:
-                        print("Stalemate: It's a tie!")
-
-                if self.board.move50 >= 50:
-                    self.running = False
-                    print("Tie: 50 moves without a capture or a pawn movement")
-            else:
-                self.select_piece()
-
-    def run(self):
-        "Main game loop"
-        self.ui.create(self.screen)
-        while self.running:
-            for event in pygame.event.get():
-                self.handle_event(event)
-
-            # Draw everything
-            self.ui.update()
-            self.ui.show_valid_moves(self.piece_moves)
-            self.ui.draw(self.screen)
-
-            pygame.display.flip()
-            self.clock.tick(FPS)
-        pygame.quit()
-
-
-if __name__ == "__main__":
-    pygame.init()
-    game = Game()
