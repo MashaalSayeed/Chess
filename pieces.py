@@ -4,37 +4,17 @@ import pygame
 
 
 # COLORS REQUIRED (RGB)
-COLOR1 = (255, 255, 255)
-COLOR2 = (118,150,86)
+COLOR1 = WHITE = (255, 255, 255)
+COLOR2 = GREEN = (118,150,86)
+SELECTED_COLOR = (233, 233, 150)
+CHECK_COLOR = (240, 72, 72)
+LAST_MOVE_COLOR = (200, 200, 150)
 
 GREY = (211, 211, 211)
-RED = (240, 72, 72)
-
-BLOCK_SELECTED = (233, 233, 150)
 
 # BOARD CONFIGURATIONS
 BLOCK_SIZE = 60, 60
 PIECE_SIZE = 45, 45
-
-# IMAGE LOCATIONS
-IMAGES = {
-    "WHITE": {
-        "PAWN": "./images/WhitePawn.png",
-        "ROOK": "./images/WhiteRook.png",
-        "KNIGHT": "./images/WhiteKnight.png",
-        "BISHOP": "./images/WhiteBishop.png",
-        "KING": "./images/WhiteKing.png",
-        "QUEEN": "./images/WhiteQueen.png"
-    },
-    "BLACK": {
-        "PAWN": "./images/BlackPawn.png",
-        "ROOK": "./images/BlackRook.png",
-        "KNIGHT": "./images/BlackKnight.png",
-        "BISHOP": "./images/BlackBishop.png",
-        "KING": "./images/BlackKing.png",
-        "QUEEN": "./images/BlackQueen.png"
-    }
-}
 
 
 class Position(collections.namedtuple('Position', ['x', 'y'])):
@@ -43,6 +23,12 @@ class Position(collections.namedtuple('Position', ['x', 'y'])):
     
     def symbol(self):
         return string.ascii_lowercase[self.x] + str(8 - self.y)
+    
+    @classmethod
+    def from_symbol(cls, symbol):
+        x = 'abcdefgh'.index(symbol[0])
+        y = int(symbol[1]) - 1
+        return cls(x, y)
 
 
 # Class for a block, usually handles all background changes when selected
@@ -58,32 +44,33 @@ class Block(pygame.sprite.Sprite):
 
         self.rect = self.image.get_rect(x=BLOCK_SIZE[0]*pos.x, y=BLOCK_SIZE[1]*pos.y)
 
-        self.selected = False
-        self.is_check = False
+        self.selected = self.is_check = False
 
     def select(self):
         # Change color to yellow when selected and change back to original when unselected
         if not self.selected:
-            self.image.fill(BLOCK_SELECTED)
+            self.image.fill(SELECTED_COLOR)
         elif self.is_check:
-            self.image.fill(RED)
+            self.image.fill(CHECK_COLOR)
         self.selected = True
     
     def deselect(self):
         self.selected = False
         if self.is_check:
-            self.image.fill(RED)
+            self.image.fill(CHECK_COLOR)
         else:
             self.image.fill(self.color)
+    
+    def last_move(self):
+        self.image.fill(LAST_MOVE_COLOR)
 
     def check(self, isCheck):
-        self.image.fill(RED if isCheck else self.color)
+        self.image.fill(CHECK_COLOR if isCheck else self.color)
         self.is_check = isCheck
 
-
-
-# Base class for all pieces        
-class Piece(pygame.sprite.Sprite): 
+     
+class Piece:
+    "Base class for all pieces"
     def __init__(self, pos: Position, color, piece):
         super().__init__()
         self.pos = pos
@@ -96,24 +83,10 @@ class Piece(pygame.sprite.Sprite):
         if self.color == 'BLACK':
             self.symbol = self.symbol.lower()
 
-        # Load the image and resize it
-        self.img = pygame.image.load(IMAGES[color][piece])
-        self.image = pygame.transform.scale(self.img, PIECE_SIZE)
-
-        self.rect = self.image.get_rect()
-        self.update_pos()
-        # Used for Castling
-        self.moved = False
-
     def move(self, pos):
         # update the coordinates of piece in square matrix
         self.pos = pos
         self.x, self.y = pos.x, pos.y
-        self.update_pos()
-
-    def update_pos(self):
-        "update position of image in the screen"
-        self.rect.center = BLOCK_SIZE[0] * (self.x + 0.5), BLOCK_SIZE[1] * (self.y + 0.5)
 
     def check_valid(self, board, x, y):
         # Checks whether the move position is valid (not out of board and not occupied by same team pieces)
@@ -122,7 +95,6 @@ class Piece(pygame.sprite.Sprite):
     def generate_moves(self, board, lst):
         # Get all valid moves based on incremented directions (diagonal, vertical, horizontal)
         valid = []
-        
         for ix, iy in lst:
             curx, cury = self.pos
             while True:
