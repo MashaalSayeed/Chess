@@ -1,10 +1,12 @@
 from constants import Position, STARTING_FEN, FILES
 
 
+BoardList = list[list['Piece']]
+
 class Piece:
     "Base class for all pieces"
     piece = ''
-    def __init__(self, pos: Position, color):
+    def __init__(self, pos: Position, color: str):
         self.pos = pos
         self.x, self.y = pos.x, pos.y
 
@@ -14,23 +16,23 @@ class Piece:
         if self.color == 'BLACK':
             self.symbol = self.symbol.lower()
 
-    def move(self, pos):
+    def move(self, pos: Position):
         # update the coordinates of piece in square matrix
         self.pos = pos
         self.x, self.y = pos.x, pos.y
 
-    def check_valid(self, board, x, y):
+    def _check_valid(self, board: BoardList, x, y):
         # Checks whether the move position is valid (not out of board and not occupied by same team pieces)
         return 0 <= x < 8 and 0 <= y < 8 and (not board[y][x] or board[y][x].color != self.color)
-            
-    def generate_moves(self, board, lst):
+
+    def _generate_moves(self, board: BoardList, lst: list[tuple[int, int]]):
         # Get all valid moves based on incremented directions (diagonal, vertical, horizontal)
         valid = []
         for ix, iy in lst:
             curx, cury = self.pos
             while True:
                 curx, cury = curx + ix, cury + iy
-                if self.check_valid(board, curx, cury):
+                if self._check_valid(board, curx, cury):
                     valid.append(Position(curx, cury))
                     if board[cury][curx]:
                         break
@@ -41,12 +43,12 @@ class Piece:
     def diagonal_moves(self, board):
         # Get all possible diagonal moves
         lst = [(1, 1), (-1, 1), (-1, -1), (1, -1)]
-        return self.generate_moves(board, lst)
+        return self._generate_moves(board, lst)
         
     def linear_moves(self, board):
         # Get all horizontal and vertical moves
         lst = [(1, 0), (0, 1), (-1, 0), (0, -1)]
-        return self.generate_moves(board, lst)
+        return self._generate_moves(board, lst)
 
     def __repr__(self):
         return f'[{self.color} {self.piece} {self.x},{self.y}]'
@@ -64,8 +66,8 @@ class Move:
 
 class Pawn(Piece):
     piece = 'PAWN'
-    def __init__(self, pos, color):
-        super().__init__(pos, color)
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
         self.increment = -1 if self.color == 'WHITE' else 1
     
     def check_en_passant(self, ep_square):
@@ -109,7 +111,7 @@ class Knight(Piece):
         valid = []
         for ix, iy in lst:
             nx, ny = self.x + ix, self.y + iy
-            if self.check_valid(board, nx, ny):
+            if self._check_valid(board, nx, ny):
                 valid.append(Position(nx, ny))
         return valid                    
 
@@ -142,7 +144,7 @@ class King(Piece):
         for ix, iy in lst:
             nx, ny = self.x + ix, self.y + iy
 
-            if self.check_valid(board, nx, ny):
+            if self._check_valid(board, nx, ny):
                 valid.append(Position(nx, ny))
         return valid
 
@@ -179,7 +181,7 @@ class Board:
         self.ep_square: Position = None
 
         # Sprite group for all pieces
-        self.pieces = set() #_sprites = pygame.sprite.Group()
+        self.pieces = set()
         self.create_board(fen_notation)
 
         self.history: list[Move] = []

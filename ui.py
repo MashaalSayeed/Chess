@@ -1,8 +1,16 @@
 import pygame
-from constants import FILES, BLOCK_SIZE, BOARD_RECT, SCREENX, SCREENY, FPS, FONT
-from constants import Position
+
+from constants import FILES, Position
 from chess import Board
 
+
+SCREENX, SCREENY = 530, 530
+FPS = 30
+FONT = 'Arial'
+
+# BOARD CONFIGURATIONS
+BOARD_RECT = 25, 25, 480, 480
+BLOCK_SIZE = 60, 60
 
 # COLORS REQUIRED (RGB)
 COLOR1 = WHITE = (255, 255, 255)
@@ -40,7 +48,7 @@ class Spritesheet:
 
 # Class for a block, usually handles all background changes when selected
 class Block(pygame.sprite.Sprite):
-    def __init__(self, pos: Position, color):
+    def __init__(self, pos: Position, color: bool):
         super().__init__()
         self.pos = pos
 
@@ -50,14 +58,12 @@ class Block(pygame.sprite.Sprite):
         self.image.fill(self.color)
 
         self.rect = self.image.get_rect(x=BLOCK_SIZE[0]*pos.x, y=BLOCK_SIZE[1]*pos.y)
-
         self.selected = self.is_check = False
 
     def select(self):
         # Change color to yellow when selected and change back to original when unselected
-        if not self.selected:
-            self.image.fill(SELECTED_COLOR)
-        elif self.is_check:
+        self.image.fill(SELECTED_COLOR)
+        if self.is_check:
             self.image.fill(CHECK_COLOR)
         self.selected = True
     
@@ -137,17 +143,15 @@ class UIManager:
         surface.blit(self.board_surface, BOARD_RECT)
 
 
-
-
 class Game:
     def __init__(self):
-        # Initialize pygame stuff
         self.clock = pygame.time.Clock()
         self.screen = pygame.display.set_mode((SCREENX, SCREENY))
-        self.running = True
+        pygame.display.set_caption('Pygame Chess')
 
         self.board = Board()
         self.selected = None
+        self.running = True
         self.piece_moves = []
 
         self.ui = UIManager(self.board)
